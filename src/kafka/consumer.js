@@ -327,7 +327,7 @@ const initializeConsumer = async () => {
         return consumer;
     }
 
-    try {
+    // try {
         // Retrieve brokers from config, which should come from process.env.KAFKA_BROKERS
         const brokers = config.kafka.brokers; 
         const saslUsername = process.env.KAFKA_USERNAME;
@@ -414,10 +414,10 @@ const initializeConsumer = async () => {
         });
         logger.info(`Kafka Consumer connected and subscribed to topic: ${config.kafka.topic}`);
         return consumer;
-    } catch (error) {
-        logger.error('Error connecting Kafka Consumer:', error);
-        throw error;
-    }
+//     } catch (error) {
+//         logger.error('Error connecting Kafka Consumer:', error);
+//         throw error;
+//     }
 };
 
 const disconnectConsumer = async () => {

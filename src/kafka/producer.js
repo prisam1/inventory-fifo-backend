@@ -307,7 +307,7 @@ const initializeProducer = async () => {
         return producer;
     }
 
-    try {
+    // try {
         // Retrieve brokers from config, which should come from process.env.KAFKA_BROKERS
         const brokers = config.kafka.brokers;
         const saslUsername = process.env.KAFKA_USERNAME;
@@ -320,7 +320,7 @@ const initializeProducer = async () => {
             brokers: brokers, // Ensure this is an array from config.js
             ssl: useSSL, // Set SSL dynamically based on environment
         }; 
-        
+
         logger.debug(`Final Kafka Consumer Config: ${JSON.stringify(kafkaConfig, null, 2)}`);
 
 
@@ -376,11 +376,11 @@ const initializeProducer = async () => {
         await producer.connect();
         logger.info("Kafka Producer connected!");
         return producer;
-    } catch (error) {
-        logger.error(`Failed to connect Kafka Producer: ${error.message}`, error);
-        producer = null; // Reset on failure
-        throw error;
-    }
+    // } catch (error) {
+    //     logger.error(`Failed to connect Kafka Producer: ${error.message}`, error);
+    //     producer = null; // Reset on failure
+    //     throw error;
+    // }
 };
 
 const sendKafkaMessage = async (topic, messages) => {
