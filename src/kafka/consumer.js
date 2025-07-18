@@ -27,7 +27,7 @@ const initializeConsumer = async () => { // Removed dbInstance param as service 
                 password: process.env.KAFKA_PASSWORD,
             },
             // You might need this if the SSL certificate is self-signed or not globally trusted
-           // ssl: { rejectUnauthorized: false }
+             ssl: { rejectUnauthorized: false }
         };
 
         const kafka = new Kafka(kafkaConfig);
