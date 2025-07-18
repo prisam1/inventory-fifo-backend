@@ -320,6 +320,7 @@ const initializeProducer = async () => {
             brokers: brokers, // Ensure this is an array from config.js
             ssl: useSSL, // Set SSL dynamically based on environment
         }; 
+        
         logger.debug(`Final Kafka Consumer Config: ${JSON.stringify(kafkaConfig, null, 2)}`);
 
 
