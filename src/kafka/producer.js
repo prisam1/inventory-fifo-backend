@@ -12,10 +12,27 @@ const initializeProducer = async () => {
     }
 
     try {
-        const kafka = new Kafka({
+        const brokers = process.env.KAFKA_BROKERS ? process.env.KAFKA_BROKERS.split(',') : config.kafka.brokers.split(',');
+
+        // Configuration for KafkaJS
+        const kafkaConfig = {
             clientId: config.kafka.clientId,
-            brokers: config.kafka.brokers, // Ensure this is an array from config.js
-        });
+            brokers: brokers,
+            ssl: true, // Always use SSL for managed services
+            sasl: {
+                mechanism: 'scram-sha-256', // Or 'plain', 'scram-sha-512' as required by your provider
+                username: process.env.KAFKA_USERNAME,
+                password: process.env.KAFKA_PASSWORD,
+            },
+            // You might need this if the SSL certificate is self-signed or not globally trusted
+            // ssl: { rejectUnauthorized: false }
+        };
+
+        const kafka = new Kafka(kafkaConfig);
+        // const kafka = new Kafka({
+        //     clientId: config.kafka.consumerClientId,
+        //     brokers: config.kafka.brokers,
+        // });
 
         producer = kafka.producer();
         await producer.connect();
