@@ -1,9 +1,10 @@
-// src/kafka/producer.js
 const { Kafka } = require("kafkajs");
 const config = require("../config");
 const logger = require("../utils/logger");
+const fs = require('fs');  
+const path = require('path');  
 
-let producer = null; // Declare as mutable
+let producer = null;
 
 const initializeProducer = async () => {
   if (producer) {
@@ -16,25 +17,41 @@ const initializeProducer = async () => {
       ? process.env.KAFKA_BROKERS.split(",")
       : config.kafka.brokers.split(",");
 
-    // Configuration for KafkaJS
+    const saslUsername = process.env.KAFKA_USERNAME;
+    const saslPassword = process.env.KAFKA_PASSWORD;
+
     const kafkaConfig = {
       clientId: config.kafka.clientId,
-      brokers: brokers,
-      ssl: true, // Always use SSL for managed services
-      sasl: {
-        mechanism: "scram-sha-256", // Or 'plain', 'scram-sha-512' as required by your provider
-        username: process.env.KAFKA_USERNAME,
-        password: process.env.KAFKA_PASSWORD,
-      },
-      // You might need this if the SSL certificate is self-signed or not globally trusted
-      ssl: { rejectUnauthorized: false },
+      brokers: brokers, 
+      ssl: true,
     };
 
+    // *** IMPORTANT: SSL Configuration with CA Certificate ***
+    if (process.env.KAFKA_CA_CERT_BASE64) {
+        const caCertPath = path.join('/tmp', 'aiven-ca-producer.pem'); 
+        fs.writeFileSync(caCertPath, Buffer.from(process.env.KAFKA_CA_CERT_BASE64, 'base64').toString('utf-8'));
+
+        kafkaConfig.ssl = {
+            ca: [fs.readFileSync(caCertPath, 'utf-8')],  
+        };
+        logger.info('Kafka Producer configured with SSL/TLS and custom CA certificate.');
+    } else {
+        logger.warn('KAFKA_CA_CERT_BASE64 not found for Producer. Kafka client proceeding with basic SSL, which may cause certificate errors.');
+        kafkaConfig.ssl = true; // Fallback to basic SSL
+    }
+ 
+    if (saslUsername && saslPassword) {
+      kafkaConfig.sasl = {
+        mechanism: "scram-sha-256",  
+        username: saslUsername,
+        password: saslPassword,
+      };
+      logger.info("Kafka Producer configured with SASL authentication.");
+    } else {
+      logger.warn("Kafka Producer not configured with SASL authentication (KAFKA_USERNAME or KAFKA_PASSWORD missing).");
+    }
+
     const kafka = new Kafka(kafkaConfig);
-    // const kafka = new Kafka({
-    //     clientId: config.kafka.consumerClientId,
-    //     brokers: config.kafka.brokers,
-    // });
 
     producer = kafka.producer();
     await producer.connect();
@@ -84,6 +101,6 @@ const disconnectProducer = async () => {
 
 module.exports = {
   initializeProducer,
-  sendKafkaMessage, // Export this for controllers to use
+  sendKafkaMessage,
   disconnectProducer,
 };
