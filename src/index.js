@@ -1,38 +1,50 @@
+// src/index.js
 const express = require("express");
 const cors = require("cors");
+const http = require("http"); // Import http for server shutdown
 const config = require("./config");
-const db = require("./db");
-const { initializeProducer, disconnectProducer } = require("./kafka/producer");
+const db = require("./db"); // Assuming this module manages your DB connection pool
+const {
+  initializeProducer,
+  sendKafkaMessage,
+  disconnectProducer,
+} = require("./kafka/producer");
 const { initializeConsumer, disconnectConsumer } = require("./kafka/consumer");
 const logger = require("./utils/logger");
+
+// Import consumer message handler from its dedicated service file
+const { handleOrderEventMessage } = require("./services/kafkaConsumerService");
 
 // Import routes
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
-const inventoryEventRoutes = require("./routes/inventoryEventRoutes");
+const {
+  router: inventoryEventRoutes,
+  setKafkaProducer,
+} = require("./routes/inventoryEventRoutes"); // For producer integration
 
 const app = express();
 const PORT = config.server.port;
-const URL = config.authenticated.uri;
+const URL = config.authenticated.uri; // Assuming this is your frontend URL for CORS
 
 // Middleware
 app.use(express.json());
 
-const allowedOrigins = [URL];
+const allowedOrigins = ["http://localhost:3000"];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) === -1) {
-        const msg =
-          "The CORS policy for this site does not allow access from the specified Origin.";
-        return callback(new Error(msg), false);
-      }
-      return callback(null, true);
-    },
-  })
-);
+app.use(cors())
+//     {
+//     origin: function (origin, callback) {
+//       if (!origin) return callback(null, true);
+//       if (allowedOrigins.indexOf(origin) === -1) {
+//         const msg =
+//           "The CORS policy for this site does not allow access from the specified Origin.";
+//         return callback(new Error(msg), false);
+//       }
+//       return callback(null, true);
+//     },
+//   })
+// );
 
 // --- Database Connection Test ---
 app.get("/api/test-db", async (req, res) => {
@@ -43,7 +55,7 @@ app.get("/api/test-db", async (req, res) => {
       timestamp: result.rows[0].now,
     });
   } catch (error) {
-    console.error("Database connection test error:", error);
+    logger.error("Database connection test error:", error);
     res.status(500).json({
       message: "Database connection failed",
       error: error.message,
@@ -52,10 +64,14 @@ app.get("/api/test-db", async (req, res) => {
 });
 // --- End Database Connection Test ---
 
+// --- Inject Kafka producer into routes ---
+// This ensures your routes can use sendKafkaMessage for specific topics
+setKafkaProducer(sendKafkaMessage, config.kafka.topics.inventoryUpdates);
+
 // Use routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
-app.use("/api/inventory-events", inventoryEventRoutes);
+app.use("/api/inventory-events", inventoryEventRoutes); // Now uses the router from the modified module
 
 // Basic home route
 app.get("/", (req, res) => {
@@ -67,34 +83,47 @@ const server = app.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`DB User: ${config.db.user}, DB Name: ${config.db.name}`);
   try {
+    // Initialize Kafka Producer
     await initializeProducer();
-    // initializeConsumer no longer needs db as it's passed to inventoryService directly
-    await initializeConsumer();
+    logger.info("Kafka Producer initialized successfully.");
+
+    // Initialize Kafka Consumer with the message handler from services
+    await initializeConsumer(handleOrderEventMessage);
+    logger.info("Kafka Consumer initialized successfully and listening.");
   } catch (error) {
     logger.error("Failed to initialize Kafka:", error);
-    // process.exit(1); // Consider if app should exit if Kafka fails
+    // It's generally good practice to exit if Kafka is a core dependency
+    process.exit(1);
   }
 });
 
 // Handle graceful shutdown
-process.on("SIGTERM", async () => {
-  logger.info("SIGTERM signal received: closing HTTP server and Kafka clients");
-  await disconnectProducer();
-  await disconnectConsumer();
-  await db.end(); // Close DB pool connection gracefully
-  server.close(() => {
-    logger.info("HTTP server closed.");
-    process.exit(0);
-  });
-});
+const gracefulShutdown = async () => {
+  logger.info("Initiating graceful shutdown...");
 
-process.on("SIGINT", async () => {
-  logger.info("SIGINT signal received: closing HTTP server and Kafka clients");
-  await disconnectProducer();
-  await disconnectConsumer();
-  await db.end(); // Close DB pool connection gracefully
+  // Disconnect Kafka clients
+  await Promise.all([
+    disconnectProducer().catch((err) =>
+      logger.error("Error disconnecting producer:", err)
+    ),
+    disconnectConsumer().catch((err) =>
+      logger.error("Error disconnecting consumer:", err)
+    ),
+  ]);
+
+  // Close DB pool connection gracefully
+  await db
+    .end()
+    .catch((err) =>
+      logger.error("Error closing database connection pool:", err)
+    );
+
+  // Close HTTP server
   server.close(() => {
     logger.info("HTTP server closed.");
     process.exit(0);
   });
-});
+};
+
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown); // For local Ctrl+C

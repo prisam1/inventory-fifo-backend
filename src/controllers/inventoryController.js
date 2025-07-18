@@ -1,9 +1,12 @@
+// src/controllers/inventoryController.js
 const { v4: uuidv4 } = require('uuid');
-const { sendKafkaMessage } = require('../kafka/producer');  
-const inventoryService = require('../services/inventoryService');  
-const logger = require('../utils/logger');  
+// REMOVE THIS LINE: const { sendKafkaMessage } = require('../kafka/producer');
+const inventoryService = require('../services/inventoryService');
+const logger = require('../utils/logger');
+// No direct import of config here, topic will be passed in.
 
-const sendInventoryEvent = async (req, res) => {
+// Modify signature to accept sendKafkaMessage and topic
+const sendInventoryEvent = async (req, res, sendKafkaMessageFn, kafkaTopic) => {
     const { product_id, event_type, quantity, unit_price } = req.body;
 
     if (!product_id || !event_type || !quantity) {
@@ -14,6 +17,11 @@ const sendInventoryEvent = async (req, res) => {
         return res.status(400).json({ message: 'Unit price is required for purchase events.' });
     }
 
+    if (!sendKafkaMessageFn || !kafkaTopic) {
+        logger.error('Kafka producer function or topic not provided to sendInventoryEvent controller.');
+        return res.status(500).json({ message: 'Kafka producer not initialized.' });
+    }
+
     try {
         const eventId = uuidv4();
         const timestamp = new Date().toISOString();
@@ -22,12 +30,13 @@ const sendInventoryEvent = async (req, res) => {
             eventId,
             product_id,
             event_type,
-            quantity: parseFloat(quantity),  
+            quantity: parseFloat(quantity),
             unit_price: event_type === 'purchase' ? parseFloat(unit_price) : undefined,
             timestamp
         };
 
-        await sendKafkaMessage('inventory-events', [{ value: JSON.stringify(event) }]); // Use the helper function
+        // Use the injected sendKafkaMessageFn
+        await sendKafkaMessageFn(kafkaTopic, event, product_id.toString());
 
         logger.info(`Inventory event accepted for product ${product_id}: ${event_type} ${quantity}`);
         res.status(202).json({ message: 'Event accepted for processing', eventId });
@@ -40,7 +49,6 @@ const sendInventoryEvent = async (req, res) => {
 
 const getInventoryTransactions = async (req, res) => {
     try {
-        // Delegate to inventory service
         const transactions = await inventoryService.getInventoryTransactions();
         res.status(200).json(transactions);
     } catch (error) {

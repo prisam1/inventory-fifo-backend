@@ -409,69 +409,217 @@
 // };
 
 // src/kafka/producer.js
-const { Kafka } = require('kafkajs'); // Still need Kafka for its types and producer() method
-const config = require('../config');
-const logger = require('../utils/logger');
-const { createKafkaInstance } = require('./kafkaClientFactory'); // Import the factory
+// const { Kafka } = require('kafkajs'); // Still need Kafka for its types and producer() method
+// const config = require('../config');
+// const logger = require('../utils/logger');
+// const { createKafkaInstance } = require('./kafkaClientFactory'); // Import the factory
 
-let producer = null;
+// let producer = null;
 
-const initializeProducer = async () => {
-    if (producer) {
-        logger.info("Kafka Producer already initialized.");
-        return producer;
-    }
+// const initializeProducer = async () => {
+//     if (producer) {
+//         logger.info("Kafka Producer already initialized.");
+//         return producer;
+//     }
 
-    try {
-        const kafka = createKafkaInstance({
-            clientId: config.kafka.clientId,
-            type: 'producer',
-        });
+//     try {
+//         const kafka = createKafkaInstance({
+//             clientId: config.kafka.clientId,
+//             type: 'producer',
+//         });
 
-        producer = kafka.producer();
-        await producer.connect();
-        logger.info("Kafka Producer connected!");
-        return producer;
-    } catch (error) {
-        logger.error(`Failed to connect Kafka Producer: ${error.message}`, error);
-        producer = null;
-        throw error;
-    }
-};
+//         producer = kafka.producer();
+//         await producer.connect();
+//         logger.info("Kafka Producer connected!");
+//         return producer;
+//     } catch (error) {
+//         logger.error(`Failed to connect Kafka Producer: ${error.message}`, error);
+//         producer = null;
+//         throw error;
+//     }
+// };
 
-const sendKafkaMessage = async (topic, messages) => {
-    if (!producer) {
-        logger.error("Kafka Producer not initialized. Cannot send message.");
-        throw new Error("Kafka Producer is not connected.");
-    }
-    try {
-        await producer.send({
-            topic,
-            messages: Array.isArray(messages) ? messages : [messages],
-        });
-        logger.info(`Message sent to topic ${topic}: ${JSON.stringify(messages)}`);
-    } catch (error) {
-        logger.error(
-            `Error sending message to Kafka topic ${topic}: ${error.message}`,
-            error
-        );
-        throw error;
-    }
-};
+// const sendKafkaMessage = async (topic, messages) => {
+//     if (!producer) {
+//         logger.error("Kafka Producer not initialized. Cannot send message.");
+//         throw new Error("Kafka Producer is not connected.");
+//     }
+//     try {
+//         await producer.send({
+//             topic,
+//             messages: Array.isArray(messages) ? messages : [messages],
+//         });
+//         logger.info(`Message sent to topic ${topic}: ${JSON.stringify(messages)}`);
+//     } catch (error) {
+//         logger.error(
+//             `Error sending message to Kafka topic ${topic}: ${error.message}`,
+//             error
+//         );
+//         throw error;
+//     }
+// };
 
-const disconnectProducer = async () => {
-    if (producer) {
-        try {
-            await producer.disconnect();
-            logger.info("Kafka Producer disconnected.");
-            producer = null;
-        } catch (error) {
-            logger.error(
-                `Error disconnecting Kafka Producer: ${error.message}`,
-                error
-            );
+// const disconnectProducer = async () => {
+//     if (producer) {
+//         try {
+//             await producer.disconnect();
+//             logger.info("Kafka Producer disconnected.");
+//             producer = null;
+//         } catch (error) {
+//             logger.error(
+//                 `Error disconnecting Kafka Producer: ${error.message}`,
+//                 error
+//             );
+//         }
+//     }
+// };
+
+// module.exports = {
+//     initializeProducer,
+//     sendKafkaMessage,
+//     disconnectProducer,
+// };
+
+
+// src/kafka/producer.js
+const Kafka = require("node-rdkafka");
+const fs = require("fs");
+const config = require("../config"); // Import config
+
+let producer = null; // Private producer instance
+let isProducerConnected = false;
+
+/**
+ * Initializes the Kafka producer.
+ * Must be called once before sending messages.
+ * @returns {Promise<void>} A promise that resolves when the producer is ready.
+ */
+const initializeProducer = () => {
+    return new Promise((resolve, reject) => {
+        if (producer && isProducerConnected) {
+            console.log("Kafka Producer already initialized and connected.");
+            return resolve();
         }
-    }
+
+        // --- Read the CA Certificate ---
+        let caCert;
+        try {
+            caCert = fs.readFileSync(config.kafka.caCertPath, 'utf-8');
+            //console.log(`Successfully read CA certificate from: ${config.kafka.caCertPath}`);
+        } catch (error) {
+            console.error(`Error reading CA certificate from ${config.kafka.caCertPath}:`, error.message);
+            return reject(new Error(`Failed to initialize producer: CA certificate read error - ${error.message}`));
+        }
+
+        producer = new Kafka.Producer({
+            "metadata.broker.list": config.kafka.brokers.join(','),
+            "security.protocol": "sasl_ssl",
+            "sasl.mechanism": config.kafka.saslMechanism,
+            "sasl.username": config.kafka.username,
+            "sasl.password": config.kafka.password,
+            "ssl.ca.location": config.kafka.caCertPath, // Path to the CA certificate file
+            "dr_cb": true // Delivery report callback
+        });
+
+        producer.on("ready", () => {
+            isProducerConnected = true;
+            console.log("Kafka Producer is ready.");
+            resolve();
+        });
+
+        producer.on("delivery-report", (err, report) => {
+            if (err) {
+                console.error("Error sending message:", err);
+                // Depending on your error handling, you might want to retry here
+            } else {
+                console.log(`Message delivered to topic ${report.topic} [${report.partition}] at offset ${report.offset}`);
+            }
+        });
+
+        producer.on("event.log", function(log) {
+            // console.log("Producer log:", log); // Uncomment for verbose librdkafka logs
+        });
+
+        producer.on("event.error", (err) => {
+            isProducerConnected = false;
+            console.error("Kafka Producer error:", err);
+            // Don't reject the promise immediately on any error,
+            // as producer might attempt to reconnect.
+            // However, a critical error might warrant a manual disconnect/reconnect.
+            // For initialization, we still reject if it errors before 'ready'.
+            if (!isProducerConnected) { // If error occurs during initial connection
+                reject(new Error(`Kafka Producer failed to connect: ${err.message}`));
+            }
+        });
+
+        producer.on("disconnected", () => {
+            isProducerConnected = false;
+            console.warn("Kafka Producer disconnected.");
+            producer = null; // Clear the instance
+        });
+
+        producer.connect();
+    });
+};
+
+/**
+ * Sends a message to a Kafka topic.
+ * @param {string} topic - The Kafka topic to send the message to.
+ * @param {object|string|Buffer} message - The message payload. Will be converted to Buffer.
+ * @param {string} [key=null] - Optional message key.
+ * @returns {Promise<void>} A promise that resolves when the message is queued.
+ */
+const sendKafkaMessage = (topic, message, key = null) => {
+    return new Promise((resolve, reject) => {
+        if (!producer || !isProducerConnected) {
+            console.error("Kafka Producer is not initialized or not connected. Cannot send message.");
+            return reject(new Error("Producer not ready."));
+        }
+
+        const messageBuffer = Buffer.isBuffer(message) ? message : Buffer.from(JSON.stringify(message));
+
+        try {
+            producer.produce(
+                topic,
+                null, // Partition (null for default)
+                messageBuffer,
+                key ? Buffer.from(key) : null,
+                Date.now(),
+                (err, offset) => { // This is the delivery report callback for this specific message
+                    if (err) {
+                        console.error(`Failed to produce message to topic ${topic}:`, err);
+                        return reject(err);
+                    }
+                    console.log(`Message queued for topic ${topic} with offset ${offset}`);
+                    resolve(offset);
+                }
+            );
+        } catch (err) {
+            console.error(`Failed to produce message synchronously to topic ${topic}:`, err);
+            reject(err);
+        }
+    });
+};
+
+/**
+ * Disconnects the Kafka producer.
+ * @returns {Promise<void>} A promise that resolves when the producer is disconnected.
+ */
+const disconnectProducer = () => {
+    return new Promise((resolve) => {
+        if (producer && isProducerConnected) {
+            console.log("Disconnecting Kafka Producer...");
+            producer.disconnect(() => {
+                isProducerConnected = false;
+                producer = null;
+                console.log("Kafka Producer disconnected successfully.");
+                resolve();
+            });
+        } else {
+            console.log("Kafka Producer not active, no need to disconnect.");
+            resolve();
+        }
+    });
 };
 
 module.exports = {

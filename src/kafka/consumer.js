@@ -421,62 +421,218 @@
 // };
 
 // src/kafka/consumer.js
-const { Kafka } = require('kafkajs'); // Still need Kafka for its types and consumer() method
-const config = require('../config');
-const logger = require('../utils/logger');
-const inventoryService = require('../services/inventoryService');
-const { createKafkaInstance } = require('./kafkaClientFactory'); // Import the factory
+
+// src/kafka/consumer.js
+// const Kafka = require("node-rdkafka");
+// const fs = require("fs");
+// const config = require("../config"); // Import config
+
+// let consumer = null;
+
+// /**
+//  * Initializes the Kafka consumer.
+//  * @param {Function} messageHandler - Callback function to handle incoming messages.
+//  * @returns {Promise<void>} A promise that resolves when the consumer is ready.
+//  */
+// const initializeConsumer = (messageHandler) => {
+//     return new Promise((resolve, reject) => {
+//         if (consumer) {
+//             console.log("Kafka Consumer already initialized.");
+//             return resolve();
+//         }
+
+//         // --- Read the CA Certificate ---
+//         let caCert;
+//         try {
+//             caCert = fs.readFileSync(config.kafka.caCertPath, 'utf-8');
+//             //console.log(`Successfully read CA certificate from: ${config.kafka.caCertPath}`);
+//         } catch (error) {
+//             console.error(`Error reading CA certificate from ${config.kafka.caCertPath}:`, error.message);
+//             return reject(new Error(`Failed to initialize consumer: CA certificate read error - ${error.message}`));
+//         }
+
+//         consumer = new Kafka.KafkaConsumer(
+//             {
+//                 "metadata.broker.list": config.kafka.brokers.join(','),
+//                 "group.id": config.kafka.consumerGroupId,
+//                 "security.protocol": "sasl_ssl",
+//                 "sasl.mechanism": config.kafka.saslMechanism,
+//                 "sasl.username": config.kafka.username,
+//                 "sasl.password": config.kafka.password,
+//                 "ssl.ca.location": config.kafka.caCertPath, // Path to the CA certificate file
+//                 "auto.offset.reset": "beginning", // Start consuming from the beginning if no offset is committed
+//                 // Optional: set to false to manually commit offsets after processing
+//                 // "enable.auto.commit": true,
+//             },
+//             {} // topic configuration (can be empty)
+//         );
+
+//         consumer.on("ready", () => {
+//             console.log("Kafka Consumer is ready.");
+//             // Subscribe here or in startConsumer, depending on desired flow
+//             consumer.subscribe([config.kafka.topics.orderEvents]); // Example: subscribe to order events
+//             consumer.consume(); // Start consuming messages
+//             resolve();
+//         });
+
+//         consumer.on("data", (message) => {
+//             console.log(`Received message from topic ${message.topic}: ${message.value.toString()}`);
+//             if (messageHandler && typeof messageHandler === 'function') {
+//                 messageHandler(message);
+//             }
+//             // If "enable.auto.commit": false, you would commit here:
+//             // consumer.commitMessage(message);
+//         });
+
+//         consumer.on("event.log", function(log) {
+//             // console.log("Consumer log:", log); // Uncomment for verbose librdkafka logs
+//         });
+
+//         consumer.on("event.error", (err) => {
+//             console.error("Kafka Consumer error:", err);
+//             // Consumer might try to reconnect; if not, you might need to re-initialize
+//         });
+
+//         consumer.on("disconnected", () => {
+//             console.warn("Kafka Consumer disconnected.");
+//             consumer = null;
+//         });
+
+//         consumer.connect();
+//     });
+// };
+
+// /**
+//  * Disconnects the Kafka consumer.
+//  * @returns {Promise<void>} A promise that resolves when the consumer is disconnected.
+//  */
+// const disconnectConsumer = () => {
+//     return new Promise((resolve) => {
+//         if (consumer) {
+//             console.log("Disconnecting Kafka Consumer...");
+//             consumer.disconnect(() => {
+//                 consumer = null;
+//                 console.log("Kafka Consumer disconnected successfully.");
+//                 resolve();
+//             });
+//         } else {
+//             console.log("Kafka Consumer not active, no need to disconnect.");
+//             resolve();
+//         }
+//     });
+// };
+
+// module.exports = {
+//     initializeConsumer,
+//     disconnectConsumer,
+// };
+
+// src/kafka/consumer.js
+const Kafka = require("node-rdkafka");
+const fs = require("fs");
+const config = require("../config"); // Import config
+const logger = require("../utils/logger"); // Use your logger
 
 let consumer = null;
+let isConsumerConnected = false;
 
-const initializeConsumer = async () => {
-    if (consumer) {
-        logger.info('Kafka Consumer already initialized.');
-        return consumer;
-    }
+/**
+ * Initializes the Kafka consumer.
+ * @param {Function} messageHandler - Callback function to handle incoming messages.
+ * @returns {Promise<void>} A promise that resolves when the consumer is ready.
+ */
+const initializeConsumer = (messageHandler) => {
+    return new Promise((resolve, reject) => {
+        if (consumer && isConsumerConnected) {
+            logger.info("Kafka Consumer already initialized and connected.");
+            return resolve();
+        }
 
-    try {
-        const kafka = createKafkaInstance({
-            clientId: config.kafka.consumerClientId,
-            type: 'consumer',
-        });
+        if (typeof messageHandler !== 'function') {
+            logger.error("Consumer messageHandler must be a function.");
+            return reject(new Error("Consumer messageHandler not provided or invalid."));
+        }
 
-        consumer = kafka.consumer({ groupId: config.kafka.consumerGroupId });
+        // --- Read the CA Certificate ---
+        let caCert;
+        try {
+            caCert = fs.readFileSync(config.kafka.caCertPath, 'utf-8');
+            logger.info(`Successfully read CA certificate from: ${config.kafka.caCertPath}`);
+        } catch (error) {
+            logger.error(`Error reading CA certificate from ${config.kafka.caCertPath}:`, error.message);
+            return reject(new Error(`Failed to initialize consumer: CA certificate read error - ${error.message}`));
+        }
 
-        await consumer.connect();
-        await consumer.subscribe({ topic: config.kafka.topic, fromBeginning: true });
-
-        await consumer.run({
-            eachMessage: async ({ topic, partition, message }) => {
-                const event = JSON.parse(message.value.toString());
-                logger.info(`Received event from Kafka: ${JSON.stringify(event)}`);
-
-                try {
-                    await inventoryService.processInventoryEvent(event);
-                    logger.info(`Processed event for product ${event.product_id}, type ${event.event_type}`);
-                } catch (error) {
-                    logger.error(`Error processing Kafka event for product ${event.product_id}: ${error.message}`, error);
-                }
+        consumer = new Kafka.KafkaConsumer(
+            {
+                "metadata.broker.list": config.kafka.brokers.join(','),
+                "group.id": config.kafka.consumerGroupId,
+                "security.protocol": "sasl_ssl",
+                "sasl.mechanism": config.kafka.saslMechanism,
+                "sasl.username": config.kafka.username,
+                "sasl.password": config.kafka.password,
+                "ssl.ca.location": config.kafka.caCertPath,
+                "auto.offset.reset": "beginning",
+                // "enable.auto.commit": false, // Set to false if you want to commit manually in messageHandler
             },
+            {} // topic configuration (can be empty)
+        );
+
+        consumer.on("ready", () => {
+            isConsumerConnected = true;
+            logger.info("Kafka Consumer is ready.");
+            consumer.subscribe([config.kafka.topics.orderEvents]);
+            consumer.consume();
+            resolve();
         });
-        logger.info(`Kafka Consumer connected and subscribed to topic: ${config.kafka.topic}`);
-        return consumer;
-    } catch (error) {
-        logger.error('Error connecting Kafka Consumer:', error);
-        throw error;
-    }
+
+        consumer.on("data", (message) => {
+            // Pass the message to the provided handler function
+            messageHandler(message);
+            // If auto.commit.enable is false, commit after processing:
+            // consumer.commitMessage(message);
+        });
+
+        consumer.on("event.log", function(log) {
+            // logger.debug("Consumer log:", log); // Uncomment for verbose librdkafka logs
+        });
+
+        consumer.on("event.error", (err) => {
+            isConsumerConnected = false;
+            logger.error("Kafka Consumer error:", err);
+            // Consumer might attempt to reconnect. For critical errors,
+            // you might want to consider process.exit(1) or more advanced error recovery.
+        });
+
+        consumer.on("disconnected", () => {
+            isConsumerConnected = false;
+            logger.warn("Kafka Consumer disconnected.");
+            consumer = null;
+        });
+
+        consumer.connect();
+    });
 };
 
-const disconnectConsumer = async () => {
-    if (consumer) {
-        try {
-            await consumer.disconnect();
-            logger.info('Kafka Consumer disconnected.');
-            consumer = null;
-        } catch (error) {
-            logger.error(`Error disconnecting Kafka Consumer: ${error.message}`, error);
+/**
+ * Disconnects the Kafka consumer.
+ * @returns {Promise<void>} A promise that resolves when the consumer is disconnected.
+ */
+const disconnectConsumer = () => {
+    return new Promise((resolve) => {
+        if (consumer && isConsumerConnected) {
+            logger.info("Disconnecting Kafka Consumer...");
+            consumer.disconnect(() => {
+                isConsumerConnected = false;
+                consumer = null;
+                logger.info("Kafka Consumer disconnected successfully.");
+                resolve();
+            });
+        } else {
+            logger.info("Kafka Consumer not active, no need to disconnect.");
+            resolve();
         }
-    }
+    });
 };
 
 module.exports = {

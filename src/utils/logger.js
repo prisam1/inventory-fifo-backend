@@ -1,30 +1,35 @@
-const { createLogger, format, transports } = require('winston');
-const { combine, timestamp, printf, colorize } = format;
+// src/utils/logger.js
+// A simple logger for demonstration. For production, consider Winston or Pino.
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info'; // 'info', 'warn', 'error', 'debug'
 
-const customFormat = printf(({ level, message, timestamp, stack }) => {
-    // Render logs already include a timestamp, so we'll simplify for console output
-    return `${level}: ${message} ${stack ? '\n' + stack : ''}`;
-});
+const levels = {
+    debug: 0,
+    info: 1,
+    warn: 2,
+    error: 3
+};
 
-// Determine the log level based on environment variable
-const logLevel = process.env.LOG_LEVEL || 'info'; // Default to 'info' if not set
-
-const logger = createLogger({
-    level: logLevel, // Use the dynamically set log level
-    format: combine(
-        colorize(), // Add color for local readability
-        timestamp({ format: 'YYYY-MM-DDTHH:mm:ss.SSSZ' }), // Include timestamp
-        customFormat
-    ),
-    transports: [
-        new transports.Console(),
-    ],
-    exceptionHandlers: [
-        new transports.Console(),
-    ],
-    rejectionHandlers: [
-        new transports.Console(),
-    ],
-});
+const logger = {
+    debug: (...args) => {
+        if (levels[LOG_LEVEL] <= levels.debug) {
+            console.log('[DEBUG]', ...args);
+        }
+    },
+    info: (...args) => {
+        if (levels[LOG_LEVEL] <= levels.info) {
+            console.log('[INFO]', ...args);
+        }
+    },
+    warn: (...args) => {
+        if (levels[LOG_LEVEL] <= levels.warn) {
+            console.warn('[WARN]', ...args);
+        }
+    },
+    error: (...args) => {
+        if (levels[LOG_LEVEL] <= levels.error) {
+            console.error('[ERROR]', ...args);
+        }
+    }
+};
 
 module.exports = logger;
