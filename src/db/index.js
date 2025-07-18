@@ -6,7 +6,7 @@ const logger = require('../utils/logger');
 const db = new Pool({
     user: config.db.user,
     host: config.db.host,
-    database: config.db.name, // Use config.db.name
+    database: config.db.name,  
     password: config.db.password,
     port: config.db.port,
 });
