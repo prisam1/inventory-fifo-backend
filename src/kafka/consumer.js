@@ -341,6 +341,8 @@ const initializeConsumer = async () => {
             ssl: useSSL, // Set SSL dynamically based on environment
         };
 
+        logger.debug(`Final Kafka Consumer Config: ${JSON.stringify(kafkaConfig, null, 2)}`);
+
         // --- Conditional SSL/TLS Configuration with CA Certificate ---
         // This block is crucial for connecting to Aiven Kafka
         if (useSSL && process.env.KAFKA_CA_CERT_BASE64) {
