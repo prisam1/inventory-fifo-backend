@@ -294,11 +294,125 @@
 
  
 // src/kafka/producer.js
-const { Kafka } = require('kafkajs');
+// const { Kafka } = require('kafkajs');
+// const config = require('../config');
+// const logger = require('../utils/logger');
+// const fs = require('fs');
+// const path = require('path');
+
+// let producer = null;
+
+// const initializeProducer = async () => {
+//     if (producer) {
+//         logger.info("Kafka Producer already initialized.");
+//         return producer;
+//     }
+
+//     try {
+//         const brokers = config.kafka.brokers; // Assuming config.kafka.brokers is correctly populated from KAFKA_BROKERS
+//         const saslUsername = process.env.KAFKA_USERNAME;
+//         const saslPassword = process.env.KAFKA_PASSWORD;
+//         const useSSL = process.env.KAFKA_USE_SSL === 'true';
+
+//         const kafkaConfig = {
+//             clientId: config.kafka.clientId, // Note: clientId for producer
+//             brokers: brokers,
+//             ssl: useSSL, // Initialize ssl based on env var
+//         }; 
+
+//         // --- Conditional SSL/TLS Configuration with CA Certificate ---
+//         if (useSSL && process.env.KAFKA_CA_CERT_BASE64) {
+//             const caCertPath = path.join('/tmp', 'aiven-ca-producer.pem'); // Unique name for producer
+            
+//             // Write the base64-decoded CA certificate to a file
+//             fs.writeFileSync(caCertPath, Buffer.from(process.env.KAFKA_CA_CERT_BASE64, 'base64').toString('utf-8'));
+
+//             // Configure KafkaJS to use the custom CA certificate
+//             kafkaConfig.ssl = {
+//                 ca: [fs.readFileSync(caCertPath, 'utf-8')], 
+//                 // Do NOT include rejectUnauthorized: false here.
+//             };
+//             logger.info('Kafka Producer configured with SSL/TLS and custom CA certificate.');
+//         } else if (useSSL) {
+//             logger.warn('KAFKA_CA_CERT_BASE64 not found for Producer. Kafka client proceeding with SSL, but may cause certificate errors.');
+//         } else {
+//             logger.info('Kafka Producer configured without SSL (KAFKA_USE_SSL is false or not set to "true").');
+//         }
+
+//         // --- Conditional SASL Authentication Configuration ---
+//         if (saslUsername && saslPassword) {
+//             kafkaConfig.sasl = {
+//                 mechanism: 'scram-sha-256',
+//                 username: saslUsername,
+//                 password: saslPassword,
+//             };
+//             logger.info('Kafka Producer configured with SASL authentication.');
+//         } else if (useSSL) { 
+//             logger.warn('Kafka Producer not configured with SASL authentication (KAFKA_USERNAME or KAFKA_PASSWORD missing) despite SSL being enabled.');
+//         }
+
+//         // >>> THIS IS THE CRUCIAL DEBUG LOG YOU NEED TO SEE IN RENDER LOGS <<<
+//         logger.debug(`Final Kafka Producer Config: ${JSON.stringify(kafkaConfig, null, 2)}`);
+
+//         const kafka = new Kafka(kafkaConfig);
+
+//         producer = kafka.producer();
+//         await producer.connect();
+//         logger.info("Kafka Producer connected!");
+//         return producer;
+//     } catch (error) {
+//         logger.error(`Failed to connect Kafka Producer: ${error.message}`, error);
+//         producer = null;
+//         throw error;
+//     }
+// };
+
+// const sendKafkaMessage = async (topic, messages) => {
+//     if (!producer) {
+//         logger.error("Kafka Producer not initialized. Cannot send message.");
+//         throw new Error("Kafka Producer is not connected.");
+//     }
+//     try {
+//         await producer.send({
+//             topic,
+//             messages: Array.isArray(messages) ? messages : [messages],
+//         });
+//         logger.info(`Message sent to topic ${topic}: ${JSON.stringify(messages)}`);
+//     } catch (error) {
+//         logger.error(
+//             `Error sending message to Kafka topic ${topic}: ${error.message}`,
+//             error
+//         );
+//         throw error;
+//     }
+// };
+
+// const disconnectProducer = async () => {
+//     if (producer) {
+//         try {
+//             await producer.disconnect();
+//             logger.info("Kafka Producer disconnected.");
+//             producer = null;
+//         } catch (error) {
+//             logger.error(
+//                 `Error disconnecting Kafka Producer: ${error.message}`,
+//                 error
+//             );
+//         }
+//     }
+// };
+
+// module.exports = {
+//     initializeProducer,
+//     sendKafkaMessage,
+//     disconnectProducer,
+// };
+
+// src/kafka/producer.js
+const { Kafka } = require('kafkajs'); // Still need Kafka for its types and producer() method
 const config = require('../config');
 const logger = require('../utils/logger');
-const fs = require('fs');
-const path = require('path');
+const { createKafkaInstance } = require('./kafkaClientFactory'); // Import the factory
 
 let producer = null;
 
@@ -309,52 +423,10 @@ const initializeProducer = async () => {
     }
 
     try {
-        const brokers = config.kafka.brokers; // Assuming config.kafka.brokers is correctly populated from KAFKA_BROKERS
-        const saslUsername = process.env.KAFKA_USERNAME;
-        const saslPassword = process.env.KAFKA_PASSWORD;
-        const useSSL = process.env.KAFKA_USE_SSL === 'true';
-
-        const kafkaConfig = {
-            clientId: config.kafka.clientId, // Note: clientId for producer
-            brokers: brokers,
-            ssl: useSSL, // Initialize ssl based on env var
-        }; 
-
-        // --- Conditional SSL/TLS Configuration with CA Certificate ---
-        if (useSSL && process.env.KAFKA_CA_CERT_BASE64) {
-            const caCertPath = path.join('/tmp', 'aiven-ca-producer.pem'); // Unique name for producer
-            
-            // Write the base64-decoded CA certificate to a file
-            fs.writeFileSync(caCertPath, Buffer.from(process.env.KAFKA_CA_CERT_BASE64, 'base64').toString('utf-8'));
-
-            // Configure KafkaJS to use the custom CA certificate
-            kafkaConfig.ssl = {
-                ca: [fs.readFileSync(caCertPath, 'utf-8')], 
-                // Do NOT include rejectUnauthorized: false here.
-            };
-            logger.info('Kafka Producer configured with SSL/TLS and custom CA certificate.');
-        } else if (useSSL) {
-            logger.warn('KAFKA_CA_CERT_BASE64 not found for Producer. Kafka client proceeding with SSL, but may cause certificate errors.');
-        } else {
-            logger.info('Kafka Producer configured without SSL (KAFKA_USE_SSL is false or not set to "true").');
-        }
-
-        // --- Conditional SASL Authentication Configuration ---
-        if (saslUsername && saslPassword) {
-            kafkaConfig.sasl = {
-                mechanism: 'scram-sha-256',
-                username: saslUsername,
-                password: saslPassword,
-            };
-            logger.info('Kafka Producer configured with SASL authentication.');
-        } else if (useSSL) { 
-            logger.warn('Kafka Producer not configured with SASL authentication (KAFKA_USERNAME or KAFKA_PASSWORD missing) despite SSL being enabled.');
-        }
-
-        // >>> THIS IS THE CRUCIAL DEBUG LOG YOU NEED TO SEE IN RENDER LOGS <<<
-        logger.debug(`Final Kafka Producer Config: ${JSON.stringify(kafkaConfig, null, 2)}`);
-
-        const kafka = new Kafka(kafkaConfig);
+        const kafka = createKafkaInstance({
+            clientId: config.kafka.clientId,
+            type: 'producer',
+        });
 
         producer = kafka.producer();
         await producer.connect();
