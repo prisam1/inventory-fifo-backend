@@ -1,8 +1,13 @@
+const authenticateToken = require("../middleware/authenticateToken");
+
 require("dotenv").config();
 
 const config = {
   server: {
-    port: process.env.SERVER_PORT || 3001,
+    port: process.env.SERVER_PORT,
+  },
+  authenticated: {
+    uri: process.env.FRONTEND_URL,
   },
   db: {
     user: process.env.DB_USER,
@@ -20,7 +25,7 @@ const config = {
   },
   jwt: {
     secret: process.env.JWT_SECRET,
-    expiresIn: process.env.JWT_EXPIRES_IN || "24h",
+    expiresIn: process.env.JWT_EXPIRES_IN,
   },
 };
 

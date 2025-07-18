@@ -1,13 +1,13 @@
+// src/kafka/consumer.js
 const { Kafka } = require("kafkajs");
 const config = require("../config");
 const logger = require("../utils/logger");
-const inventoryService = require("../services/inventoryService");
-const fs = require('fs');  
-const path = require('path');  
+const inventoryService = require("../services/inventoryService"); // <--- Import the service
 
 let consumer = null;
 
 const initializeConsumer = async () => {
+  // Removed dbInstance param as service imports db
   if (consumer) {
     logger.info("Kafka Consumer already initialized.");
     return consumer;
@@ -18,41 +18,25 @@ const initializeConsumer = async () => {
       ? process.env.KAFKA_BROKERS.split(",")
       : config.kafka.brokers.split(",");
 
-    const saslUsername = process.env.KAFKA_USERNAME;
-    const saslPassword = process.env.KAFKA_PASSWORD;
-
+    // Configuration for KafkaJS
     const kafkaConfig = {
       clientId: config.kafka.clientId,
-      brokers: brokers, 
+      brokers: brokers,
       ssl: true,
+      sasl: {
+        mechanism: "scram-sha-256",
+        username: process.env.KAFKA_USERNAME,
+        password: process.env.KAFKA_PASSWORD,
+      },
+      // You might need this if the SSL certificate is self-signed or not globally trusted
+      //ssl: { rejectUnauthorized: false },
     };
 
-    // *** IMPORTANT: SSL Configuration with CA Certificate ***
-    if (process.env.KAFKA_CA_CERT_BASE64) {
-        const caCertPath = path.join('/tmp', 'aiven-ca-consumer.pem');  
-        fs.writeFileSync(caCertPath, Buffer.from(process.env.KAFKA_CA_CERT_BASE64, 'base64').toString('utf-8'));
-
-        kafkaConfig.ssl = {
-            ca: [fs.readFileSync(caCertPath, 'utf-8')],  
-        };
-        logger.info('Kafka Consumer configured with SSL/TLS and custom CA certificate.');
-    } else {
-        logger.warn('KAFKA_CA_CERT_BASE64 not found for Consumer. Kafka client proceeding with basic SSL, which may cause certificate errors.');
-        kafkaConfig.ssl = true; // Fallback to basic SSL
-    }
- 
-    if (saslUsername && saslPassword) {
-      kafkaConfig.sasl = {
-        mechanism: "scram-sha-256",  
-        username: saslUsername,
-        password: saslPassword,
-      };
-      logger.info("Kafka Consumer configured with SASL authentication.");
-    } else {
-      logger.warn("Kafka Consumer not configured with SASL authentication (KAFKA_USERNAME or KAFKA_PASSWORD missing).");
-    }
-
     const kafka = new Kafka(kafkaConfig);
+    // const kafka = new Kafka({
+    //     clientId: config.kafka.consumerClientId,
+    //     brokers: config.kafka.brokers,
+    // });
 
     consumer = kafka.consumer({ groupId: config.kafka.consumerGroupId });
 
@@ -68,6 +52,8 @@ const initializeConsumer = async () => {
         logger.info(`Received event from Kafka: ${JSON.stringify(event)}`);
 
         try {
+          // Call the service function without passing db explicitly here,
+          // as inventoryService imports db directly.
           await inventoryService.processInventoryEvent(event);
           logger.info(
             `Processed event for product ${event.product_id}, type ${event.event_type}`
