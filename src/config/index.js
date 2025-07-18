@@ -35,7 +35,7 @@ const config = {
         
         // SSL/TLS
         caCertPath: path.join(process.cwd(), process.env.KAFKA_CA_CERT_PATH || 'ca.pem'), // Path to CA certificate
-
+ 
         // Topics used by the application
         topics: {
             inventoryUpdates: process.env.KAFKA_TOPIC_INVENTORY_UPDATES || 'inventory-updates', // Producer topic
