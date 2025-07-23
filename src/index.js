@@ -78,6 +78,11 @@ app.get("/", (req, res) => {
   res.send("Welcome to the Inventory FIFO System Backend!");
 });
 
+db.query('SELECT 1')
+  .then(() => logger.info("✅ PostgreSQL connection test successful"))
+  .catch(err => logger.error("❌ PostgreSQL connection test failed", err));
+
+
 // Start the server
 const server = app.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);

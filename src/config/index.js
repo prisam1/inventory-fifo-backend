@@ -51,7 +51,7 @@ const config = {
     // --- JWT Configuration ---
     jwt: {
         secret: process.env.JWT_SECRET,
-        expiresIn: process.env.JWT_EXPIRES_IN || '1h', // Default to 1 hour if not specified
+        expiresIn: process.env.JWT_EXPIRES_IN, // Default to 1 hour if not specified
     },
 
     // --- Logger Configuration ---

@@ -553,7 +553,7 @@ const initializeConsumer = (messageHandler) => {
             return reject(new Error("Consumer messageHandler not provided or invalid."));
         }
 
-        // --- Read the CA Certificate ---
+        // --- Read the CA Certificate --- 
         let caCert;
         try {
             caCert = fs.readFileSync(config.kafka.caCertPath, 'utf-8');
@@ -562,7 +562,7 @@ const initializeConsumer = (messageHandler) => {
             logger.error(`Error reading CA certificate from ${config.kafka.caCertPath}:`, error.message);
             return reject(new Error(`Failed to initialize consumer: CA certificate read error - ${error.message}`));
         }
-
+ 
         consumer = new Kafka.KafkaConsumer(
             {
                 "metadata.broker.list": config.kafka.brokers.join(','),
