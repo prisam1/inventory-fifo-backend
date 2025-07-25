@@ -3,6 +3,7 @@ const config = require("../config");
 const logger = require("../utils/logger");
 
 const db = new Pool({
+  connectionString: config.db.connectionString,
   user: config.db.user,
   host: config.db.host,
   database: config.db.name,
