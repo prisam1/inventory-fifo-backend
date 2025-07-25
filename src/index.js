@@ -86,7 +86,7 @@ db.query('SELECT 1')
 // Start the server
 const server = app.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
-  logger.info(`DB User: ${config.db.user}, DB Name: ${config.db.name}`);
+ // logger.info(`DB User: ${config.db.user}, DB Name: ${config.db.name}`);
   try {
     // Initialize Kafka Producer
     await initializeProducer();
