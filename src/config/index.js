@@ -4,12 +4,12 @@ const path = require("path");
 const config = {
   // --- Server Configuration ---
   server: {
-    port: parseInt(process.env.SERVER_PORT, 10), // Use PORT from .env, default to 10000
+    port: parseInt(process.env.SERVER_PORT, 10), // PORT from .env, default to 10000
   },
 
   // --- Authenticated URI for CORS ---
   authenticated: {
-    uri: process.env.AUTHENTICATED_URI, // Use AUTHENTICATED_URI for frontend URL
+    uri: process.env.AUTHENTICATED_URI, // AUTHENTICATED_URI for frontend URL
   },
 
   // --- Database Configuration ---
@@ -17,7 +17,7 @@ const config = {
     connectionString: process.env.DATABASE_URL,
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
-    name: process.env.DB_NAME, // Use DB_NAME consistently for database name
+    name: process.env.DB_NAME, // DB_NAME consistently for database name
     password: process.env.DB_PASSWORD,
     port: parseInt(process.env.DB_PORT, 10),
   },
