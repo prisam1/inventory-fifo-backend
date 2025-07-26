@@ -1,4 +1,4 @@
-require("dotenv").config();  
+require("dotenv").config();
 const path = require("path");
 
 const config = {
@@ -36,16 +36,14 @@ const config = {
     saslMechanism: process.env.KAFKA_SASL_MECHANISM,
 
     // SSL/TLS
-    caCertPath: path.join(process.cwd(), process.env.KAFKA_CA_CERT_PATH), // Path to CA certificate
+    caCertPath: process.env.KAFKA_CA_CERT_PATH, //  CA certificate
+    clientCertPath: process.env.KAFKA_CLIENT_CERT_PATH,
+    clientKeyPath: process.env.KAFKA_CLIENT_KEY_PATH,
+
     // TLS / SASL
     useMtls: process.env.KAFKA_USE_MTLS === "true",
     sslRejectUnauthorized:
       (process.env.KAFKA_SSL_REJECT_UNAUTHORIZED || "true") === "true",
-    clientCertPath: path.join(
-      process.cwd(),
-      process.env.KAFKA_CLIENT_CERT_PATH
-    ),
-    clientKeyPath: path.join(process.cwd(), process.env.KAFKA_CLIENT_KEY_PATH),
 
     // Topics used by the application
     topics: {
