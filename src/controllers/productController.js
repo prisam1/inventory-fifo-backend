@@ -11,7 +11,7 @@ const getProducts = async (req, res) => {
     logger.error(`Error fetching products: ${err.message}`, err);
     res.status(500).json({ message: "Error fetching products" });
   }
-};
+}; 
 
 const getProductStockOverview = async (req, res) => {
   try {
@@ -87,7 +87,7 @@ const createProduct = async (req, res) => {
   }
 };
 
-module.exports = {
+module.exports = { 
   getProducts,
   getProductStockOverview,
   createProduct,

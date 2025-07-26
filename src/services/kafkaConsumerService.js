@@ -1,44 +1,28 @@
-// src/services/kafkaConsumerService.js
-const logger = require('../utils/logger'); // Your logger
-const db = require('../db'); // Your database connection
+const logger = require('../utils/logger');
+const { processInventoryEvent } = require('./inventoryService');  
 
 /**
- * Handles incoming Kafka messages from the consumer.
- * This function contains the business logic for processing messages.
- * @param {object} message - The Kafka message object.
+ * Handle messages coming from Kafka (inventory-updates topic)
+ * We pass (topic, message) from consumer.run(...)
  */
-const handleOrderEventMessage = async (message) => {
-    try {
-        const payload = JSON.parse(message.value.toString());
-        logger.info(`Processing Order Event:`, payload);
-
-        // --- Business Logic: Consumer writes to DB based on the message ---
-        const { orderId, products, totalAmount } = payload;
-        if (orderId && products && totalAmount) {
-            try {
-                // IMPORTANT: Replace this with your actual database logic.
-                // This is a placeholder for inserting/updating inventory based on an order.
-                // Example: Insert into an 'orders_processed' table
-                // await db.query(
-                //     `INSERT INTO orders_processed (order_id, products_json, total_amount, processed_at) VALUES ($1, $2, $3, NOW())`,
-                //     [orderId, JSON.stringify(products), totalAmount]
-                // );
-                logger.info(`Order ${orderId} successfully processed and recorded in DB.`);
-            } catch (dbError) {
-                logger.error(`Error saving order ${orderId} to DB: ${dbError.message}`);
-                // Implement robust error handling for DB writes
-                // (e.g., retry mechanisms, logging to a dead-letter topic, alerting)
-            }
-        } else {
-            logger.warn(`Received malformed order event message: ${JSON.stringify(payload)}`);
-        }
-        // --- End Business Logic ---
-
-    } catch (error) {
-        logger.error(`Error parsing or processing order event message: ${error.message}`, message.value.toString());
+const handleInventoryEventMessage = async (topic, message) => {
+  try {
+    if (!message || !message.value) {
+      logger.error(`[Kafka] Empty message on ${topic}`);
+      return;
     }
+
+    const payload = JSON.parse(message.value.toString());
+    logger.info(`[Kafka] Message on ${topic}: ${JSON.stringify(payload)}`);
+
+    // producer sends inventory events (purchase/sale), so always process them
+    await processInventoryEvent(payload);
+    logger.info(`[Kafka] Event processed for product ${payload.product_id} (eventId: ${payload.eventId})`);
+  } catch (error) {
+    logger.error(`[Kafka] Failed to process message on ${topic}: ${error.message}`, error);
+  }
 };
 
 module.exports = {
-    handleOrderEventMessage,
+  handleInventoryEventMessage,
 };

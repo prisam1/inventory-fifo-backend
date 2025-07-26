@@ -1,5 +1,4 @@
-// src/config/index.js
-require("dotenv").config(); // Load environment variables from .env file
+require("dotenv").config();  
 const path = require("path");
 
 const config = {
@@ -10,11 +9,12 @@ const config = {
 
   // --- Authenticated URI for CORS ---
   authenticated: {
-    uri: process.env.AUTHENTICATED_URI || "http://localhost:3000", // Use AUTHENTICATED_URI for frontend URL
+    uri: process.env.AUTHENTICATED_URI, // Use AUTHENTICATED_URI for frontend URL
   },
 
   // --- Database Configuration ---
   db: {
+    connectionString: process.env.DATABASE_URL,
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
     name: process.env.DB_NAME, // Use DB_NAME consistently for database name
@@ -33,10 +33,19 @@ const config = {
     // SASL authentication
     username: process.env.KAFKA_USERNAME,
     password: process.env.KAFKA_PASSWORD,
-    saslMechanism: process.env.KAFKA_SASL_MECHANISM || "SCRAM-SHA-256",
+    saslMechanism: process.env.KAFKA_SASL_MECHANISM,
 
     // SSL/TLS
     caCertPath: path.join(process.cwd(), process.env.KAFKA_CA_CERT_PATH), // Path to CA certificate
+    // TLS / SASL
+    useMtls: process.env.KAFKA_USE_MTLS === "true",
+    sslRejectUnauthorized:
+      (process.env.KAFKA_SSL_REJECT_UNAUTHORIZED || "true") === "true",
+    clientCertPath: path.join(
+      process.cwd(),
+      process.env.KAFKA_CLIENT_CERT_PATH
+    ),
+    clientKeyPath: path.join(process.cwd(), process.env.KAFKA_CLIENT_KEY_PATH),
 
     // Topics used by the application
     topics: {
